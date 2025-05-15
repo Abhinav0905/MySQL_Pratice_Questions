@@ -1,0 +1,82 @@
+-- 25 Window Functions Questions
+
+-- These involve ranking, running totals, partitioning, etc. 
+-- You’ll typically use functions like ROW_NUMBER(), RANK(), DENSE_RANK(), LAG(), LEAD(), SUM() OVER(...), etc. 
+
+-- 	1.	Calculate a running total of orders by date in the orders table, partitioned by customer_id.
+select order_id, customer_id , order_date, sum(total_amount) OVER (Partition BY customer_id order by order_date ROWS between unbounded preceding AND Current ROW) AS Running_Total
+from orders;
+ 
+-- 	2.	Assign a ROW_NUMBER() to each order for each customer, ordered by order_date ascending.
+Select c.first_name, c.last_name, c.customer_id,o.order_date,o.order_id,
+		ROW_NUMBER() OVER (Partition by o.customer_id ORDER BY o.order_date ASC) as customer_rank
+        from customers c
+        join orders o 
+        on c.customer_id = o.customer_id
+        order by o.order_date, c.customer_id;
+        
+-- 	3.	Rank products by total quantity sold using RANK() or DENSE_RANK() 
+-- (partitioning might not be needed if it’s across all products).
+
+WITH cte_product_sales AS(SELECT
+p.product_id, p.product_name, sum(oi.quantity) as total_sold
+from order_items oi 
+join products p 
+on p.product_id = oi.product_id
+group by p.product_id, p.product_name)
+select product_id, product_name, total_sold,
+	RANK() OVER (ORDER BY total_sold DESC) AS product_rank,
+    DENSE_RANK() OVER (ORDER BY total_sold DESC) as product_dense_rank
+    from cte_product_sales;
+    
+-- 	4.	Find the top 2 products in each category by total quantity sold (partition by category).
+with product_sales as (SELECT SUM(oi.quantity) as total_sold, oi.product_id, p.product_name, p.category
+from order_items oi 
+join products p 
+on oi.product_id = p.product_id
+group by p.product_name, p.category, p.product_id)
+SELECT category, product_id, product_name, total_sold
+	from (select ps.*, ROW_NUMBER() OVER(Partition by category order by total_sold DESC) as rn
+		  from product_sales ps ) as t
+          where rn <=2
+          order by category, rn;
+
+WITH product_sales AS (   -- CTE
+    SELECT
+        p.category,
+        p.product_id,
+        p.product_name,
+        SUM(oi.quantity) AS total_sold
+    FROM order_items oi
+    JOIN products p ON p.product_id = oi.product_id
+    GROUP BY p.category, p.product_id, p.product_name
+)
+SELECT
+    ps.*,                                -- ← this expands to the four columns above
+    ROW_NUMBER() OVER (
+        PARTITION BY category
+        ORDER BY total_sold DESC
+    ) AS rn
+FROM product_sales ps;  -- ps is just an alias for the CTE
+
+WITH sales AS (
+  SELECT p.category, p.product_id, SUM(oi.quantity) AS total_sold
+  FROM order_items oi
+  JOIN products p ON p.product_id = oi.product_id
+  GROUP BY p.category, p.product_id
+)
+SELECT category, product_id, total_sold
+FROM (
+  SELECT sales.*,
+         ROW_NUMBER() OVER (PARTITION BY category ORDER BY total_sold DESC) AS rn
+  FROM sales
+) as t;
+
+-- 	5.	Compute each employee’s cumulative salary over time, ordered by hire_date. 
+select employee_id, first_name, last_name, hire_date, salary, SUM(salary) OVER (ORDER BY hire_date) as salary_over_time
+from employees
+order by hire_date;
+
+-- 	6.	Show each order_item with a running total of quantity partitioned by order_id.
+select order_item_id, order_id, product_id , quantity , SUM(quantity) OVER ( PARTITION BY order_id order by order_item_id) as running_total
+from order_items;
