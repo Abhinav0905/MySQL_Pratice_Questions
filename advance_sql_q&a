@@ -80,3 +80,83 @@ order by hire_date;
 -- 	6.	Show each order_item with a running total of quantity partitioned by order_id.
 select order_item_id, order_id, product_id , quantity , SUM(quantity) OVER ( PARTITION BY order_id order by order_item_id) as running_total
 from order_items;
+
+-- 	7.	For each product, calculate the average item_price and then show a difference from the current row’s 
+--      item_price using LAG() or LEAD().
+
+select p.product_name, p.product_id, p.category,oi.order_id,
+	   AVG(oi.item_price) OVER (PARTITION BY oi.product_id) as avg_item_price,
+       LEAD(oi.item_price) OVER (partition by oi.product_id ORDER BY p.created_at) as next_price,
+       LAG(oi.item_price) OVER (PARTITION BY oi.product_id ORDER BY p.created_at) as prev_price,
+       -- check price diff from the previous 
+       oi.item_price - LAG(oi.item_price) OVER (PARTITION BY oi.product_id ORDER BY p.created_at) as diff_from_prev,
+       LEAD(oi.item_price) OVER (PARTITION BY oi.product_id ORDER BY p.created_at) as diff_to_next
+       from products p 
+       join order_items oi 
+       on p.product_id = oi.product_id
+       ORDER BY p.created_at;
+    
+-- 	8.	Determine the percentage of total quantity sold for each product 
+-- (e.g., (quantity / SUM(quantity) OVER()) * 100).
+WITH CTE_avg_order AS (SELECT ((oi.quantity)/SUM(oi.quantity) * 100) AS avg_item_quantity, p.product_id, p.product_name
+from order_items oi 
+left join products p 
+on oi.product_id = p.product_id
+GROUP BY p.product_id)
+
+select 
+product_id, 
+product_name, 
+AVG(avg_item_quantity) OVER (PARTITION BY product_id ORDER BY product_id)
+from CTE_avg_order; 
+
+WITH product_totals AS (
+    SELECT
+        p.product_id,
+        p.product_name,
+        SUM(oi.quantity) AS product_qty
+    FROM order_items oi
+    JOIN products     p ON p.product_id = oi.product_id
+    GROUP BY p.product_id, p.product_name
+)
+SELECT
+    product_id,
+    product_name,
+    product_qty,
+    100.0 * product_qty
+          / SUM(product_qty) OVER () AS pct_of_total
+FROM product_totals
+ORDER BY pct_of_total DESC;
+
+
+-- 	9.	List all customers with a row_number based on the order in which they joined (ORDER BY created_at).
+
+select customer_id, first_name, last_name, email,
+RANK() OVER(ORDER BY created_at ASC) as "RAnk_as_Joined",
+DENSE_RANK() OVER(ORDER BY created_at) as "Desnsed_rank_as_joined"
+from customers;
+
+-- 	10.	Compute the average order amount per customer and show how each order compares to the average (difference).
+select o.order_id, c.customer_id,o.order_date,
+AVG(COALESCE(o.total_amount,0)) OVER (Partition by c.customer_id) AS AvgOrderAmount,
+AVG(COALESCE(o.total_amount,0)) OVER (Partition by c.customer_id ORDER BY order_date ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS MovingAvg 
+from orders o 
+left join customers c 
+on o.customer_id = o.customer_id;
+
+
+-- 	11.	Show each employee’s salary and the highest salary in their department (partition by department).
+
+select first_name, last_name , department , salary ,
+MAX(salary) OVER (PARTITION BY department ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS MaxSalaryDEPT
+from employees; 
+
+-- 	12.	Use LAG() to show how total_amount of the current order differs from the previous order by the same customer.
+select total_amount, order_id, customer_id,
+LAG(total_amount) OVER (PARTITION BY customer_id ORDER BY order_date) AS DifffromPrevOrder
+from orders;
+
+-- 	13.	Assign a DENSE_RANK() of employees by salary, highest to lowest.
+Select first_name, last_name, department, salary, 
+dense_rank() OVER (ORDER BY salary DESC) as DesnsedRank
+from Employees;
