@@ -160,3 +160,39 @@ from orders;
 Select first_name, last_name, department, salary, 
 dense_rank() OVER (ORDER BY salary DESC) as DesnsedRank
 from Employees;
+
+-- 	14.	Calculate a rolling 3-order average of total_amount per customer (if your DB supports it).
+select o.order_id, c.customer_id, o.order_date,
+AVG(o.total_amount) OVER ( PARTITION BY c.customer_id order by o.order_date) as Avg_sales_value,
+LAG(o.total_amount) OVER ( PARTITION BY c.customer_id Order by o.order_date) as Rolling_avg
+from orders o 
+left join customers c 
+on o.customer_id = o.customer_id;
+-- 	15.	For each customer, show the time difference (LEAD()) between consecutive orders (order_date).
+select c.customer_id, o.order_id, c.first_name, c.last_name,
+LEAD(DATEDIFF(order_date)) OVER (PARTITION BY c.customer_id order by o.order_date) as time_difference
+from orders o 
+left join customers c 
+on o.customer_id = c.customer_id; 
+-- 	16.	List each product and cumulative sum of revenue (quantity * item_price), partitioned by product_id, 
+-- ordered by order_date if you join to orders.
+
+select p.product_id, p.product_name, oi.order_item_id , oi.order_id,oi.item_price,
+SUM(oi.quantity * oi.item_price) OVER (PARTITION BY p.product_id) as revenue_by_product_id
+from products p
+left join order_items oi
+ on oi.product_id = p.product_id;
+ 
+-- 	17.	Identify employees who have the 2nd highest salary in each department (use RANK() or DENSE_RANK()).
+select first_name, last_name, salary, department,
+RANK() OVER (PARTITION BY department Order by salary)
+from employees 
+where salary < (select max(salary) from employees);
+
+-- 	18.	Calculate each order’s total_amount and the running total of total_amount for that customer over time.
+select o.order_id, o.total_amount, o.customer_id, c.first_name, c.last_name,
+SUM(o.total_amount) OVER (order by o.order_date) as Running_total,
+sum(o.total_amount) OVER (partition by c.customer_id ORDER BY o.order_date) as Total_Amount
+from orders o 
+left join customers c 
+on o.customer_id = c.customer_id;
