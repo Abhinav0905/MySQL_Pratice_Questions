@@ -1,1 +1,121 @@
+-- ==============================================
+-- Window‐Functions Practice Questions (1–60)
+-- ==============================================
 
+-- 1. For every customer, calculate a running count of orders sorted by order_date.
+
+select c.customer_id, c.first_name, c.last_name, o.order_id,o.order_date,
+COUNT(o.order_id) OVER ( partition by c.customer_id order by o.order_date) as Count_of_order_for_each_customer,
+COUNT(o.order_id) OVER (order by o.order_date) as Running_order
+from customers c 
+left join orders o 
+on o.customer_id = c.customer_id;
+
+-- 2. Show each order’s total_amount and the median (50th-percentile) order value for that customer.
+WITH numbered AS (
+SELECT total_amount,
+ROW_NUMBER() OVER (order by total_amount) as rn,
+COUNT(*) OVER() as cnt
+from orders 
+)
+select AVG(total_amount) AS median_count
+From Numbered
+where rn in (Floor((cnt+1)/2),
+CEIL((cnt+1)/2)
+);
+
+-- 3. List the five most recent orders per customer.
+Select o.order_id, o.customer_id, o.order_date,
+c.first_name,
+RANK() OVER (PARTITION BY o.customer_id Order by o.order_date ROWS BETWEEN CURRENT ROW AND unbounded following) as Top5_recent_orders
+from orders o 
+left join customers c
+on o.customer_id = c.customer_id;
+
+-- 4. Compute a 7-day moving average of daily order counts across the whole store.
+
+-- with daily_count as (
+-- select DATE(order_date) as order_day,
+-- count(*) as order_count
+-- from orders 
+-- group by DATE(order_date)
+-- ) ;
+
+-- 5. Rank products inside each category by average item_price.
+With avg_item_price AS (
+select oi.product_id, AVG(oi.item_price) as a_item_price
+from order_items oi
+group by product_id
+)
+select p.product_id, p.product_name,p.category, aip.a_item_price,
+RANK() OVER (Partition by category order by aip.a_item_price) as product_rank
+from products p
+left join avg_item_price aip
+on aip.product_id = p.product_id
+order by p.category, product_rank;
+
+
+
+-- 6. For every employee, show the percentage their salary contributes to their department’s total payroll.
+
+with total_salary as (
+select count(*) as Total_nUmber_of_Employees,
+sum(salary) as Total_Salary,
+department
+from 
+employees
+Group By department
+)
+Select 
+e1.salary,e1.department,
+100* (e1.salary/ts.Total_Salary) as "% Salary_Contribution"
+from employees e1 
+join total_salary ts
+on ts.department = e1.department
+group by e1.department
+order by e1.department;
+
+select 
+first_name, 
+last_name, 
+department, 
+salary, 
+100*salary/SUM(salary) OVER (Partition by department) as  pct_of_dept_payroll
+from employees
+group by department, first_name, last_name, salary;
+
+
+-- 7. Display each product and the day on which it first sold (min order_date) and 
+-- last sold (max) as extra columns via window functions.
+
+select product_id, product_name,category,
+MIN(created_at) OVER (Partition by product_id) as first_sold,
+MAX(created_at) OVER (Partition by product_id) as last_sold
+from products p 
+order by product_id;
+
+-- 8. For each customer, find the largest gap in days between any two consecutive orders (LAG).
+
+select o.order_date, c.first_name, c.last_name, c.customer_id,
+LAG(order_id) OVER (PARTITION BY c.Customer_id Order by o.order_date) as "Two consecuitve Orders"
+from customers c 
+left join orders o 
+on o.customer_id = c.customer_id;
+ 
+-- 9. Show every order with a flag indicating whether its total_amount exceeds the customer’s average order value.
+
+with order_avg_price as(
+Select Round(avg(total_amount),2) as avg_price,
+customer_id
+from orders
+group by customer_id)
+-- How to group by by only one field ... ?? 
+select o.customer_id, o.total_amount,
+CASE 
+WHEN o.total_amount > oi.avg_price THEN "Higher" 
+WHEN o.total_amount < oi.avg_price THEN "Low"
+ELSE "Equal price"
+END as "price flag"
+FROM orders o 
+left join order_avg_price oi
+on oi.customer_id = o.customer_id;
